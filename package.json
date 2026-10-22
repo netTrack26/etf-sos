@@ -1,0 +1,10 @@
+{
+  "name": "etf-sos-mvp-v3",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "ETF SOS prototype with official source scanning and daily history",
+  "dependencies": {
+    "@netlify/blobs": "^10.7.13"
+  }
+}
