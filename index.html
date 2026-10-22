@@ -23,8 +23,75 @@ function addIsin(){let input=$('#isinInput'),v=input.value.trim().toUpperCase();
 function openDetail(item){$('#modalTitle').textContent=item.title||'Comunicazione';$('#modalText').textContent=item.summary||item.note||'Apri la fonte ufficiale per i dettagli.';$('#modalInfo').textContent=[item.date||'Data non indicata',item.source||item.name||'Fonte ufficiale',item.match||'Rilevanza da verificare'].join(' · ');$('#modalLink').href=item.url||item.sourceUrl||'#';$('#modalback').style.display='flex'}
 function renderAlerts(items){let area=$('#alerts');area.replaceChildren();if(!items?.length){area.append(mk('div','mutedbox','Nessun titolo pertinente estratto nel controllo corrente. Non significa che non siano state pubblicate modifiche: alcune pagine caricano i contenuti dinamicamente o non mostrano gli avvisi nello stesso formato. Apri le fonti ufficiali per un controllo manuale.'))}else items.forEach(item=>{let card=mk('article','alert'),top=mk('div','alerttop'),title=mk('div','alerttitle',item.title||'Comunicazione ufficiale'),st=mk('span','status '+(item.kind==='possible-match'?'good':'live'),item.status||(item.kind==='possible-match'?'POSSIBILE CORRISPONDENZA':'FONTE UFFICIALE')),p=mk('p','',item.summary||item.note||'Titolo estratto da una fonte ufficiale; verifica il contenuto originale.'),b=mk('button','textbtn','Dettagli e fonte →');b.type='button';b.onclick=()=>openDetail(item);top.append(title,st);card.append(top,p,b);card.append(mk('div','sourcehead smalllabel',`${item.date||'Data da verificare'} · ${item.source||''}`));area.append(card)});$('#statAlerts').textContent=items.length;$('#navCount').textContent=items.length}
 function renderSources(sources){const data=sources||sourceDefs.map(s=>({...s,ok:null,count:null,note:s.desc}));$('#sources').replaceChildren();data.forEach(s=>{let box=mk('div','source'),head=mk('div','sourcehead'),name=mk('strong','',s.name),status=mk('span','tag '+(s.ok===true?'good':s.ok===false?'warn':''),s.ok===true?'RAGGIUNTA':s.ok===false?'NON RAGGIUNTA':'FONTE'),p=mk('p','',s.note||s.description||''),small=mk('small','',s.checkedAt?`Controllata: ${new Date(s.checkedAt).toLocaleString('it-IT')} · titoli: ${s.count??0}`:'Il controllo live si attiva dopo il deploy su Netlify.');head.append(name,status);box.append(head,p,small,mk('p','', ''));let link=mk('a','','Apri pagina ufficiale ↗');link.href=s.url;link.target='_blank';link.rel='noopener';box.append(link);$('#sources').append(box)})}
-function renderHistory(data,available){const area=$('#history');area.replaceChildren();if(!available||!data){area.append(mk('div','mutedbox','Storico persistente non disponibile: pubblica il sito su Netlify e verifica che Netlify Blobs sia attivo. I controlli manuali possono comunque funzionare senza storico persistente.'));return}const scans=data.scans||[],notices=data.notices||[];if(!scans.length&&!notices.length){area.append(mk('div','mutedbox','Nessuna esecuzione ancora registrata. Dopo il primo controllo, qui appariranno lo storico e i titoli visti.'));return}if(scans.length){area.append(mk('div','sub','ULTIMI CONTROLLI'));scans.slice(0,8).forEach(s=>{const x=mk('div','historyitem'),strong=mk('strong','',new Date(s.checkedAt).toLocaleString('it-IT')),small=mk('small','',`${s.successfulSources}/${s.sourceCount} fonti raggiunte · ${s.itemCount} titoli rilevati`);x.append(strong,small);area.append(x)})}if(notices.length){area.append(mk('div','sub','COMUNICAZIONI VISTE DAL MONITOR'));notices.slice(0,10).forEach(n=>{const x=mk('div','historyitem'),strong=mk('strong','',n.title),small=mk('small','',`${n.source} · prima vista ${new Date(n.firstSeen).toLocaleDateString('it-IT')} · ultimo controllo ${new Date(n.lastSeen).toLocaleDateString('it-IT')}`),a=mk('a','','Apri fonte ↗');a.href=n.url;a.target='_blank';a.rel='noopener';x.append(strong,small,mk('p','',''));x.append(a);area.append(x)})}}
-async function fetchHistory(){const b=$('#historyBtn');if(b){b.classList.add('loading');b.textContent='Caricamento…'}try{const r=await fetch('/.netlify/functions/history',{headers:{Accept:'application/json'}});const d=await r.json();renderHistory(d,d.ok===true)}catch(e){renderHistory(null,false)}finally{if(b){b.classList.remove('loading');b.textContent='Aggiorna storico'}}}
-async function scan(){const buttons=[$('#scanBtn'),$('#scanTop')];buttons.forEach(b=>{b.classList.add('loading');b.textContent='Controllo…'});$('#statStatus').textContent='In corso';$('#sourceStatus').replaceChildren(mk('span','dot'),mk('span','','Interrogazione delle pagine ufficiali selezionate…'));try{const ids=['IE00BK5BQT80',...userIsins];const r=await fetch('/.netlify/functions/scan-notices?isins='+encodeURIComponent(ids.join(',')),{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok&&!d.sources)throw Error('endpoint non disponibile');renderAlerts(d.items||[]);renderSources(d.sources||null);const ok=(d.sources||[]).filter(s=>s.ok).length;$('#statSources').textContent=`${ok}/${(d.sources||[]).length}`;$('#sourceSub').textContent=ok?'Fonti raggiunte in questo controllo':'Nessuna fonte raggiunta';$('#statStatus').textContent='Controllato';$('#lastCheck').textContent=new Date(d.checkedAt).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});$('#sourceStatus').replaceChildren(mk('span','dot '+(ok?'ok':'')),mk('span','',`${ok} fonti raggiunte su ${(d.sources||[]).length}. I titoli non sono ancora analizzati integralmente nei documenti.`));renderHistory(d.history,d.historyAvailable===true);toast(ok?'Controllo completato: apri gli avvisi per verificarli':'Controllo eseguito, ma le fonti non sono state raggiunte')}catch(e){$('#statStatus').textContent='Non attivo';$('#sourceStatus').replaceChildren(mk('span','dot'),mk('span','','Endpoint non disponibile. Pubblica la cartella su Netlify: aprire index.html da sola non attiva le funzioni server-side.'));renderAlerts([]);renderSources(null);toast('Il controllo live richiede il deploy completo su Netlify')}finally{buttons.forEach((b,i)=>{b.classList.remove('loading');b.textContent=i===0?'Controlla ora':'↻ Controlla le fonti'})}}
-$('#addBtn').onclick=addIsin;$('#isinInput').addEventListener('keydown',e=>{if(e.key==='Enter')addIsin()});$('#scanBtn').onclick=scan;$('#scanTop').onclick=scan;$('#historyBtn').onclick=fetchHistory;$('#closeModal').onclick=()=>$('#modalback').style.display='none';$('#modalback').onclick=e=>{if(e.target.id==='modalback')$('#modalback').style.display='none'};document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));b.classList.add('active');const target={alerts:'#alertsPanel',portfolio:'#portfolioPanel',sources:'#sourcesPanel',history:'#historyPanel',overview:'body'}[b.dataset.tab];$(target).scrollIntoView({behavior:'smooth',block:'start'})});load();renderSources(null);fetchHistory();
-</script></body></html>
+
+function renderHistory(data, available) {
+  const area = $('#history');
+  area.replaceChildren();
+
+  if (!available || !data || data.ok !== true) {
+    area.append(mk(
+      'div',
+      'mutedbox',
+      'Storico non disponibile. Riprova dopo aver verificato il collegamento con Netlify.'
+    ));
+    return;
+  }
+
+  const scans = Array.isArray(data.history) ? data.history : [];
+
+  if (scans.length === 0) {
+    area.append(mk(
+      'div',
+      'mutedbox',
+      'Nessuna esecuzione ancora registrata. Dopo il primo controllo, qui appariranno lo storico e i titoli rilevati.'
+    ));
+    return;
+  }
+
+  area.append(mk('div', 'sub', 'ULTIMI CONTROLLI'));
+
+  scans.slice(0, 8).forEach(s => {
+    const x = mk('div', 'historyitem');
+    const date = s.checkedAt
+      ? new Date(s.checkedAt).toLocaleString('it-IT')
+      : 'Data non disponibile';
+
+    const successful = Array.isArray(s.sources)
+      ? s.sources.filter(source => source.ok).length
+      : 0;
+
+    const total = Array.isArray(s.sources) ? s.sources.length : 0;
+    const count = Number(s.itemCount ?? s.items?.length ?? 0);
+
+    const strong = mk('strong', '', date);
+    const small = mk(
+      'small',
+      '',
+      `${successful}/${total} fonti raggiunte · ${count} titoli rilevati`
+    );
+
+    x.append(strong, small);
+    area.append(x);
+
+    if (Array.isArray(s.items) && s.items.length > 0) {
+      s.items.slice(0, 10).forEach(item => {
+        const notice = mk('div', 'historyitem');
+        const title = mk('strong', '', item.title || 'Comunicazione ufficiale');
+        const info = mk(
+          'small',
+          '',
+          `${item.source || 'Fonte ufficiale'} · ${item.status || 'Da verificare'}`
+        );
+
+        const link = mk('a', '', 'Apri fonte ufficiale ↗');
+        link.href = item.url || item.sourceUrl || '#';
+        link.target = '_blank';
+        link.rel = 'noopener';
+
+        notice.append(title, info, link);
+        area.append(notice);
+      });
+    }
+  });
+}
+
